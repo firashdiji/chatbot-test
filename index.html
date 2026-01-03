@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hdiji design — Chat (AI + files)</title>
+  <style>
+    :root{
+      --bg:#ece5dd; --panel:#efeae2; --accent:#075e54; --accent-2:#25d366;
+      --user-bg:#dcf8c6; --bot-bg:#fff; --muted:#6b6b6b; --radius:12px; --max-width:680px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body{background:var(--bg);display:flex;align-items:center;justify-content:center;padding:18px}
+    .chat-container{width:100%;max-width:var(--max-width);height:86vh;background:var(--panel);border-radius:var(--radius);box-shadow:0 10px 30px rgba(0,0,0,.15);display:flex;flex-direction:column;overflow:hidden}
+    header{background:var(--accent);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:12px}
+    header h1{margin:0;font-size:16px}
+    .toolbar{margin-left:auto;display:flex;gap:8px}
+    .btn{background:transparent;border:none;color:white;cursor:pointer;padding:6px;border-radius:8px}
+    .chips{display:flex;gap:8px;padding:10px;flex-wrap:wrap}
+    .chip{background:var(--accent-2);border:none;color:#003219;padding:6px 10px;border-radius:10px;cursor:pointer}
+    main.chat{flex:1;display:flex;flex-direction:column;padding:12px;gap:10px;position:relative}
+    .messages{flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth}
+    .message{max-width:78%;padding:10px 12px;border-radius:12px;display:flex;gap:10px;align-items:flex-end}
+    .message.bot{align-self:flex-start;background:var(--bot-bg)}
+    .message.user{align-self:flex-end;background:var(--user-bg)}
+    .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;flex:0 0 40px}
+    .avatar.bot{background:linear-gradient(135deg,#1f8a7f,#075e54)}
+    .avatar.user{background:#6bbf73}
+    .bubble{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+    .meta{font-size:11px;color:var(--muted);margin-top:6px}
+    .footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,.06);align-items:flex-end;background:transparent}
+    .composer{display:flex;gap:8px;align-items:center;width:100%}
+    .input{flex:1;border-radius:999px;padding:10px 14px;border:none;background:white;min-height:44px;resize:none;font-size:14px;box-shadow:inset 0 1px 0 rgba(0,0,0,.03)}
+    .input:focus{outline:3px solid rgba(7,94,84,.12)}
+    .send-btn{background:var(--accent);color:white;border:none;padding:10px 12px;border-radius:10px;cursor:pointer}
+    .send-btn:disabled{opacity:.6;cursor:not-allowed}
+    .file-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .file-preview{background:#fff;padding:6px;border-radius:8px;border:1px solid rgba(0,0,0,.06);display:flex;gap:8px;align-items:center}
+    .file-preview img{max-width:120px;max-height:90px;object-fit:cover;border-radius:6px}
+    .progress{height:6px;background:#eee;border-radius:6px;overflow:hidden;margin-top:6px;width:100%}
+    .progress > div{height:100%;background:var(--accent-2);width:0%}
+    .typing{display:flex;gap:6px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--bot-bg);width:max-content}
+    .dots{display:inline-block;width:6px;height:6px;background:#bbb;border-radius:50%;animation:blink 1s infinite}
+    .dots:nth-child(2){animation-delay:.15s}
+    .dots:nth-child(3){animation-delay:.3s}
+    @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+    .scroll-bottom{position:absolute;right:14px;bottom:94px;background:rgba(7,94,84,.95);color:white;padding:8px;border-radius:999px;cursor:pointer;display:none;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+    @media (max-width:720px){.chat-container{height:92vh}}
+  </style>
+</head>
+<body>
+  <div class="chat-container" role="application" aria-label="Hdiji design chat widget">
+    <header>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:44px;height:44px;border-radius:10px;background:white;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent)">Hd</div>
+        <div>
+          <h1>Hdiji design</h1>
+          <div style="font-size:12px;color:#e8f3ee">AI-powered chat with attachments</div>
+        </div>
+      </div>
+      <div class="toolbar" role="toolbar" aria-label="Toolbar">
+        <button id="exportBtn" class="btn" title="Export chat">⬇️</button>
+        <button id="clearBtn" class="btn" title="Clear chat">🗑️</button>
+      </div>
+    </header>
+
+    <div class="chips" role="toolbar" aria-label="Quick replies">
+      <button class="chip" data-text="Hello">👋 Hello</button>
+      <button class="chip" data-text="Prix">💰 Prices</button>
+      <button class="chip" data-text="Help">❓ Help</button>
+      <label style="margin-left:auto;font-size:12px;color:#333;align-self:center">
+        Attach <input id="fileInput" type="file" multiple style="display:none" />
+        <button id="attachBtn" class="chip" type="button">📎 Attach</button>
+      </label>
+    </div>
+
+    <main class="chat" id="chatApp">
+      <div id="messages" class="messages" role="log" aria-live="polite"></div>
+      <button id="scrollBtn" class="scroll-bottom" aria-hidden="true">⬇ New</button>
+
+      <div style="padding:0 12px 12px 12px">
+        <div id="fileArea" class="file-list" aria-live="polite"></div>
+        <div class="footer" role="region" aria-label="Message composer">
+          <form id="composer" class="composer" onsubmit="return false;">
+            <textarea id="msg" class="input" rows="1" placeholder="Type a message — Enter to send, Shift+Enter for newline" aria-label="Message input"></textarea>
+            <button id="send" class="send-btn" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Client logic for AI chat + attachments
+    (function(){
+      const messagesEl = document.getElementById('messages');
+      const input = document.getElementById('msg');
+      const sendBtn = document.getElementById('send');
+      const attachBtn = document.getElementById('attachBtn');
+      const fileInput = document.getElementById('fileInput');
+      const fileArea = document.getElementById('fileArea');
+      const scrollBtn = document.getElementById('scrollBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const exportBtn = document.getElementById('exportBtn');
+
+      let attachments = []; // {file:File, previewUrl, uploadedUrl, progress}
+      const state = {memory: []};
+
+      const uid = ()=> Math.random().toString(36).slice(2,9);
+      const nowISO = ()=> new Date().toISOString();
+
+      // safe message element creation
+      function createMessageEl(msg){
+        const wrap = document.createElement('div');
+        wrap.className = 'message ' + (msg.sender === 'user' ? 'user' : 'bot');
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar ' + (msg.sender === 'user' ? 'user' : 'bot');
+        avatar.textContent = msg.sender === 'user' ? 'U' : 'B';
+
+        const content = document.createElement('div');
+        content.style.display='flex';
+        content.style.flexDirection='column';
+
+        const bubble = document.createElement('div');
+        bubble.className='bubble';
+        bubble.textContent = msg.text || '';
+
+        content.appendChild(bubble);
+
+        // attachments (images show preview, others show link)
+        if (msg.attachments && msg.attachments.length){
+          const filesWrap = document.createElement('div');
+          filesWrap.style.display='flex';
+          filesWrap.style.gap='8px';
+          filesWrap.style.marginTop='8px';
+          msg.attachments.forEach(a=>{
+            const item = document.createElement('div');
+            item.className = 'file-preview';
+            item.style.flexDirection = 'column';
+            item.style.alignItems='flex-start';
+            // image preview if image
+            if (a.url && a.type && a.type.startsWith('image/')){
+              const img = document.createElement('img');
+              img.src = a.url;
+              img.alt = a.name || 'image';
+              item.appendChild(img);
+              const link = document.createElement('a');
+              link.href = a.url; link.target='_blank'; link.rel='noopener';
+              link.textContent = a.name || 'Image';
+              item.appendChild(link);
+            } else {
+              const link = document.createElement('a');
+              link.href = a.url || '#';
+              link.target = '_blank'; link.rel='noopener';
+              link.textContent = a.name || 'file';
+              item.appendChild(link);
+            }
+            filesWrap.appendChild(item);
+          });
+          content.appendChild(filesWrap);
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = new Date(msg.ts).toLocaleString();
+
+        content.appendChild(meta);
+
+        if (msg.sender === 'bot'){
+          wrap.appendChild(avatar);
+          wrap.appendChild(content);
+        } else {
+          wrap.appendChild(content);
+          wrap.appendChild(avatar);
+        }
+
+        return wrap;
+      }
+
+      function appendMessage(msg, save=true){
+        messagesEl.appendChild(createMessageEl(msg));
+        if (save) state.memory.push(msg);
+        scrollToBottom();
+      }
+
+      function scrollToBottom(){
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      // scroll button logic
+      messagesEl.addEventListener('scroll', ()=>{
+        const scrollFromBottom = messagesEl.scrollHeight - messagesEl.clientHeight - messagesEl.scrollTop;
+        if (scrollFromBottom > 140){
+          scrollBtn.style.display = 'block';
+          scrollBtn.setAttribute('aria-hidden','false');
+        } else {
+          scrollBtn.style.display = 'none';
+          scrollBtn.setAttribute('aria-hidden','true');
+        }
+      });
+      scrollBtn.addEventListener('click', ()=> scrollToBottom());
+
+      // file attach flow: preview -> upload when sending
+      attachBtn.addEventListener('click', ()=> fileInput.click());
+      fileInput.addEventListener('change', (e)=>{
+        const files = Array.from(e.target.files);
+        for (const f of files){
+          const previewUrl = URL.createObjectURL(f);
+          const meta = {id: uid(), file:f, previewUrl, uploadedUrl:null, progress:0};
+          attachments.push(meta);
+          renderAttachments();
+        }
+        // reset input
+        fileInput.value = '';
+      });
+
+      function renderAttachments(){
+        fileArea.innerHTML = '';
+        attachments.forEach(a=>{
+          const el = document.createElement('div');
+          el.className = 'file-preview';
+          el.style.display='flex'; el.style.flexDirection='column'; el.style.alignItems='flex-start';
+
+          if (a.file.type.startsWith('image/')){
+            const img = document.createElement('img'); img.src = a.previewUrl; img.alt = a.file.name;
+            img.style.maxWidth='120px'; img.style.maxHeight='90px'; img.style.objectFit='cover'; img.style.borderRadius='6px';
+            el.appendChild(img);
+          }
+
+          const label = document.createElement('div');
+          label.textContent = a.file.name;
+          el.appendChild(label);
+
+          const progressWrap = document.createElement('div'); progressWrap.className='progress';
+          const bar = document.createElement('div'); bar.style.width = (a.progress||0) + '%';
+          progressWrap.appendChild(bar);
+          el.appendChild(progressWrap);
+
+          const remove = document.createElement('button'); remove.textContent='Remove'; remove.style.marginTop='6px';
+          remove.addEventListener('click', ()=> {
+            // revoke preview
+            try{ URL.revokeObjectURL(a.previewUrl);}catch{}
+            attachments = attachments.filter(x=>x.id!==a.id);
+            renderAttachments();
+          });
+          el.appendChild(remove);
+
+          fileArea.appendChild(el);
+        });
+      }
+
+      // upload a file to /api/upload (returns {url, name, type})
+      async function uploadFile(att, onProgress){
+        const form = new FormData();
+        form.append('file', att.file, att.file.name);
+        try {
+          const xhr = new XMLHttpRequest();
+          return await new Promise((resolve, reject)=>{
+            xhr.open('POST', '/api/upload', true);
+            xhr.upload.onprogress = (e)=>{
+              if (e.lengthComputable){
+                const pct = Math.round(e.loaded / e.total * 100);
+                onProgress(pct);
+              }
+            };
+            xhr.onload = ()=>{
+              if (xhr.status >= 200 && xhr.status < 300){
+                const resp = JSON.parse(xhr.responseText);
+                resolve(resp);
+              } else {
+                reject(new Error('Upload failed: ' + xhr.statusText));
+              }
+            };
+            xhr.onerror = ()=> reject(new Error('Upload error'));
+            xhr.send(form);
+          });
+        } catch(err){
+          console.error(err);
+          throw err;
+        }
+      }
+
+      // compose message + (optionally) upload attachments, then call /api/chat
+      async function sendMessage(rawText){
+        const text = (rawText||'').trim();
+        if (!text && attachments.length===0) return;
+
+        // 1. Append user's message immediately with local attachment previews
+        const userMsg = {id: uid(), sender:'user', text: text || '(attachment)', ts: nowISO(), attachments: attachments.map(a => ({name: a.file.name, url: a.previewUrl, type: a.file.type, temp:true}))};
+        appendMessage(userMsg, true);
+
+        // 2. Upload attachments sequentially (or parallel) and update progress
+        const uploadedAttachments = [];
+        for (const a of attachments){
+          try {
+            const resp = await uploadFile(a, (pct)=> {
+              a.progress = pct;
+              renderAttachments();
+            });
+            // resp should include url, name, type
+            a.uploadedUrl = resp.url;
+            uploadedAttachments.push({name: resp.name || a.file.name, url: resp.url, type: a.file.type});
+          } catch(err){
+            // mark as failed
+            uploadedAttachments.push({name: a.file.name, url:null, type: a.file.type, error: true});
+          }
+        }
+        // clear attachments UI (we keep them in the message as uploaded URLs)
+        attachments = [];
+        renderAttachments();
+
+        // 3. Show typing indicator
+        const typingWrap = document.createElement('div');
+        typingWrap.className = 'message bot';
+        typingWrap.style.alignSelf = 'flex-start';
+        const avatar = document.createElement('div'); avatar.className='avatar bot'; avatar.textContent='B';
+        const typingBox = document.createElement('div'); typingBox.className='typing';
+        const d1=document.createElement('span'); d1.className='dots';
+        const d2=document.createElement('span'); d2.className='dots';
+        const d3=document.createElement('span'); d3.className='dots';
+        typingBox.appendChild(d1); typingBox.appendChild(d2); typingBox.appendChild(d3);
+        typingWrap.appendChild(avatar); typingWrap.appendChild(typingBox);
+        messagesEl.appendChild(typingWrap);
+        scrollToBottom();
+
+        // 4. Call /api/chat with text + uploadedAttachments
+        try {
+          const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({text, attachments: uploadedAttachments})
+          });
+          const data = await resp.json();
+          typingWrap.remove();
+
+          // server should return {reply: string, attachments: [{name,url,type}]}
+          const botMsg = {id: uid(), sender:'bot', text: data.reply || 'Sorry, no reply', ts: nowISO(), attachments: data.attachments || []};
+          appendMessage(botMsg, true);
+        } catch(err){
+          typingWrap.remove();
+          const errMsg = {id: uid(), sender:'bot', text: 'Error contacting server: ' + (err.message || ''), ts: nowISO()};
+          appendMessage(errMsg, true);
+        }
+      }
+
+      // UI events
+      sendBtn.addEventListener('click', ()=> { sendMessage(input.value); input.value=''; input.style.height='auto'; });
+      input.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(input.value); input.value=''; input.style.height='auto'; }
+      });
+      input.addEventListener('input', ()=> { input.style.height='auto'; input.style.height = Math.min(180, input.scrollHeight) + 'px'; });
+
+      // quick chips
+      document.querySelectorAll('.chip[data-text]').forEach(btn=> btn.addEventListener('click', ()=> { sendMessage(btn.dataset.text); }));
+
+      // clear/export
+      clearBtn.addEventListener('click', ()=> {
+        if (confirm('Clear conversation?')) { messagesEl.innerHTML=''; state.memory=[]; attachments=[]; fileArea.innerHTML=''; }
+      });
+      exportBtn.addEventListener('click', ()=> {
+        const data = JSON.stringify(state.memory, null, 2);
+        const blob = new Blob([data], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download='chat.json'; a.click(); URL.revokeObjectURL(url);
+      });
+
+      // initial welcome
+      appendMessage({id:uid(), sender:'bot', text:'Welcome! Attach images/files with 📎 and ask anything — AI will reply automatically.', ts: nowISO()}, true);
+
+      // focus input
+      setTimeout(()=> input.focus(), 200);
+    })();
+  </script>
+</body>
+</html>
